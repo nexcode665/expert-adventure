@@ -17,7 +17,7 @@ jobs:
 
       - name: Clone ImmortalWrt 23.05
         run: |
-          git clone -b v23.05 --single-branch --depth=1 https://github.com/immortalwrt/immortalwrt
+          git clone -b openwrt-23.05 --single-branch --depth=1 https://github.com/immortalwrt/immortalwrt
           cd immortalwrt
 
       - name: Add OpenClash & PassWall feeds
@@ -69,3 +69,4 @@ jobs:
         with:
           name: immortalwrt-x86-1g-openclash-passwall
           path: immortalwrt/bin/targets/x86/*/*
+
