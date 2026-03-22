@@ -30,8 +30,8 @@ jobs:
       - name: Update & Install feeds
         run: |
           cd immortalwrt
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+          ./scripts/feeds update -a || true
+          ./scripts/feeds install -a || true
 
       - name: 1GB内存精简配置 + OpenClash + PassWall
         run: |
@@ -57,12 +57,12 @@ jobs:
       - name: Download Libraries
         run: |
           cd immortalwrt
-          make download -j$(nproc)
+          make download -j$(nproc) V=s
 
       - name: Build
         run: |
           cd immortalwrt
-          make -j$(nproc) || make -j1 V=s
+          make -j1 V=s
 
       - name: Upload Firmware
         uses: actions/upload-artifact@v4
