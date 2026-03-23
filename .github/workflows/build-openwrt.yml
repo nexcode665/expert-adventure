@@ -1,0 +1,90 @@
+name: Lean_x86_64_旁路由_爱快专用
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装编译环境
+        run: |
+          sudo apt update -y
+          sudo apt install -y build-essential libncurses5-dev libncursesw5-dev git wget curl ccache
+
+      - name: 拉取 Lean 源码
+        run: |
+          git clone https://github.com/coolsnowwolf/lede openwrt
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 安装 PassWall + OpenClash
+        run: |
+          cd openwrt/package
+          git clone --depth 1 https://github.com/vernesong/OpenClash.git
+          git clone --depth 1 https://github.com/xiaorouji/openwrt-passwall-packages.git passwall_pkg
+          git clone --depth 1 https://github.com/xiaorouji/openwrt-passwall.git passwall
+          cd ..
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 写入旁路由固定IP 192.168.9.23
+        env:
+          # 🔧 核心修复：把配置内容放到环境变量里，彻底避开缩进问题
+          OPENWRT_CONFIG: |
+            CONFIG_TARGET_x86=y
+            CONFIG_TARGET_x86_64=y
+            CONFIG_TARGET_x86_64_DEVICE_generic=y
+
+            # 镜像格式
+            CONFIG_TARGET_ROOTFS_EXT4=y
+            CONFIG_TARGET_ROOTFS_SQUASHFS=y
+            CONFIG_TARGET_IMAGES_GZIP=y
+            CONFIG_VMDK_IMAGES=y
+
+            # 旁路由必备插件
+            CONFIG_PACKAGE_luci-app-openclash=y
+            CONFIG_PACKAGE_luci-app-passwall=y
+            CONFIG_PACKAGE_luci-app-passwall2=y
+
+            # 基础工具
+            CONFIG_PACKAGE_luci-app-ttyd=y
+            CONFIG_PACKAGE_luci-app-autoreboot=y
+            CONFIG_PACKAGE_dnsmasq-full=y
+            CONFIG_PACKAGE_ipv6helper=y
+            CONFIG_PACKAGE_htop=y
+        run: |
+          cd openwrt
+          rm -f .config
+          # 直接 echo 环境变量到文件，不用管缩进
+          echo "$OPENWRT_CONFIG" > .config
+          
+          # 设置固定IP 192.168.9.23 + 关闭DHCP
+          sed -i 's/192.168.1.1/192.168.9.23/g' package/base-files/files/bin/config_generate
+          sed -i 's/192.168.1.255/192.168.9.255/g' package/base-files/files/bin/config_generate
+          sed -i '/dhcp.lan.ignore/d' package/base-files/files/bin/config_generate
+          echo "uci set dhcp.lan.ignore=1" >> package/base-files/files/bin/config_generate
+          echo "uci set network.lan.gateway='192.168.9.1'" >> package/base-files/files/bin/config_generate
+          echo "uci set network.lan.dns='192.168.9.1'" >> package/base-files/files/bin/config_generate
+          echo "uci commit network" >> package/base-files/files/bin/config_generate
+          echo "uci commit dhcp" >> package/base-files/files/bin/config_generate
+
+      - name: 下载依赖
+        run: |
+          cd openwrt
+          make defconfig
+          make download -j8
+
+      - name: 开始编译
+        run: |
+          cd openwrt
+          make -j$(nproc) || make -j1 V=s
+
+      - name: 上传固件
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenWrt-Lean-x86_64-旁路由-192.168.9.23
+          path: openwrt/bin/targets/x86/64/*combined*.gz
