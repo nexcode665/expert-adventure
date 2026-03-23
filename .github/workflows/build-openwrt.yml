@@ -16,35 +16,58 @@ jobs:
 
       - name: 拉取 Lean 源码
         run: |
-          git clone https://mirror.ghproxy.com/https://github.com/coolsnowwolf/lede openwrt
+          # 定义克隆重试函数，应对Runner临时网络波动
+          retry_clone() {
+            local url=$1
+            local dir=$2
+            for i in 1 2 3; do
+              echo "尝试克隆仓库: $url (第$i次)"
+              if git clone --depth 1 "$url" "$dir"; then
+                echo "✅ 克隆成功"
+                return 0
+              fi
+              echo "❌ 克隆失败，等待5秒后重试"
+              sleep 5
+            done
+            echo "❌ 克隆失败，已重试3次"
+            return 1
+          }
+
+          # 清理残留目录，避免重复克隆报错
+          rm -rf openwrt
+          # 海外Runner直连GitHub原生地址，无需代理
+          retry_clone https://github.com/coolsnowwolf/lede.git openwrt
+          
           cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
       - name: 安装 PassWall + OpenClash
         run: |
-          cd openwrt/package
-          rm -rf OpenClash passwall_pkg passwall
-          
           retry_clone() {
             local url=$1
             local dir=$2
             for i in 1 2 3; do
-              echo "尝试克隆: $url (第$i次)"
+              echo "尝试克隆插件: $url (第$i次)"
               if git clone --depth 1 "$url" "$dir"; then
-                echo "克隆成功"
+                echo "✅ 克隆成功"
                 return 0
               fi
-              echo "克隆失败，等待5秒后重试"
+              echo "❌ 克隆失败，等待5秒后重试"
               sleep 5
             done
-            echo "克隆失败，已重试3次"
+            echo "❌ 克隆失败，已重试3次"
             return 1
           }
+
+          cd openwrt/package
+          # 清理残留目录
+          rm -rf OpenClash passwall_pkg passwall
           
-          retry_clone https://mirror.ghproxy.com/https://github.com/vernesong/OpenClash.git OpenClash
-          retry_clone https://mirror.ghproxy.com/https://github.com/xiaorouji/openwrt-passwall-packages.git passwall_pkg
-          retry_clone https://mirror.ghproxy.com/https://github.com/xiaorouji/openwrt-passwall.git passwall
+          # 直连原生GitHub地址
+          retry_clone https://github.com/vernesong/OpenClash.git OpenClash
+          retry_clone https://github.com/xiaorouji/openwrt-passwall-packages.git passwall_pkg
+          retry_clone https://github.com/xiaorouji/openwrt-passwall.git passwall
           
           cd ..
           ./scripts/feeds update -a
