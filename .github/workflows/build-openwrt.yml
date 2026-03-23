@@ -16,7 +16,7 @@ jobs:
 
       - name: 拉取 Lean 源码
         run: |
-          git clone https://github.com/coolsnowwolf/lede openwrt
+          git clone https://mirror.ghproxy.com/https://github.com/coolsnowwolf/lede openwrt
           cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
@@ -24,16 +24,34 @@ jobs:
       - name: 安装 PassWall + OpenClash
         run: |
           cd openwrt/package
-          git clone --depth 1 https://github.com/vernesong/OpenClash.git
-          git clone --depth 1 https://github.com/xiaorouji/openwrt-passwall-packages.git passwall_pkg
-          git clone --depth 1 https://github.com/xiaorouji/openwrt-passwall.git passwall
+          rm -rf OpenClash passwall_pkg passwall
+          
+          retry_clone() {
+            local url=$1
+            local dir=$2
+            for i in 1 2 3; do
+              echo "尝试克隆: $url (第$i次)"
+              if git clone --depth 1 "$url" "$dir"; then
+                echo "克隆成功"
+                return 0
+              fi
+              echo "克隆失败，等待5秒后重试"
+              sleep 5
+            done
+            echo "克隆失败，已重试3次"
+            return 1
+          }
+          
+          retry_clone https://mirror.ghproxy.com/https://github.com/vernesong/OpenClash.git OpenClash
+          retry_clone https://mirror.ghproxy.com/https://github.com/xiaorouji/openwrt-passwall-packages.git passwall_pkg
+          retry_clone https://mirror.ghproxy.com/https://github.com/xiaorouji/openwrt-passwall.git passwall
+          
           cd ..
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
       - name: 写入旁路由固定IP 192.168.9.23
         env:
-          # 🔧 核心修复：把配置内容放到环境变量里，彻底避开缩进问题
           OPENWRT_CONFIG: |
             CONFIG_TARGET_x86=y
             CONFIG_TARGET_x86_64=y
@@ -59,7 +77,6 @@ jobs:
         run: |
           cd openwrt
           rm -f .config
-          # 直接 echo 环境变量到文件，不用管缩进
           echo "$OPENWRT_CONFIG" > .config
           
           # 设置固定IP 192.168.9.23 + 关闭DHCP
